@@ -1,0 +1,39 @@
+Custom kit persistence, spear, durability, independent stacks, OP Sharpness IV / Protection III
+Arena prepares incrementally before teleport and preserves inventory while queued
+Chest settings, advanced AI settings, Legend difficulty, kit preview, countdown and arena startup
+Preset op gives equal equipment
+Preset axe gives equal equipment
+Preset mace gives equal equipment
+Preset critical gives equal equipment
+Preset combo gives equal equipment
+Native attack damage and critical filtering: critical
+Native attack damage and critical filtering: combo
+Eight bots move, friendly fire is disabled, victory and rematch work
+Bot independently jumps, accumulates real fall distance and deals an accepted critical hit
+Bot HP is synchronized to the client for live overhead labels
+Bot keeps pearls while target is far and follows a player's throw with a real projectile
+Regular golden apple is consumed and applies vanilla regeneration
+Splash Strength II and Speed II are consumed and apply native effects
+Experience bottles repair damaged Mending armor through native XP orbs
+Axe bot uses its shield while facing a threat
+A charged native axe hit disables a blocking shield
+Player can launch a floor-targeted offhand wind charge while holding a mace; arena block placement stays blocked
+Mace bot launches itself using a real wind-charge projectile
+Mace bot lands a real airborne smash with bonus damage before touching the floor
+Mace bot chains another airborne smash using Wind Burst III without any remaining wind charges
+Defeat opens results and suppresses normal death
+Clicking a characteristic accepts exact chat values, supports 0–60000 ms and rejects out-of-range input
+Nightmare difficulty, kit autoreplay toggle, victory/loss restarts, series counters and explicit stop work
+A threatened low-health bot throws a finite defensive pearl, gains distance and consumes a golden apple
+A player's pearl does not interrupt a bot eating a golden apple or waste a follow pearl
+Bot uses a rate-limited pressure pearl against a fleeing low-health player without repeated throws
+High difficulty bot throws a real pearl downward during a dangerous fall and survives without hidden healing
+Mace kit includes Lunge III spear and bot uses its native dash to close distance
+Bot equips real elytra when short of the target, consumes rockets, closes distance and restores its original chestplate without duplication
+A bot carrying a shield commits to its jumping critical and strikes in the first available fall window
+Advanced movement routes around ruin pillars, uses the axe kit sword and switches to axe against a shield
+Decorated arena confines players and bots at horizontal/vertical boundaries and returns dimension escapes until explicit leave
+Renamed BoxPVP reads legacy FabricBase kit and recovery directories
+Closing and reopening an actual live match restores the original player without concurrent saves
+Interrupted-session journal survives world restart and restores inventory, durability, XP, effects and dimension
+An interrupted FabricBase session loads its legacy dimension, restores original gear/XP/effects and removes legacy training drops

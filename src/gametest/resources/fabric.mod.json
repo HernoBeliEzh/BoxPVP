@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "boxpvp-test",
+  "version": "1.0.0",
+  "name": "BoxPvp integration tests",
+  "environment": "client",
+  "entrypoints": {
+    "fabric-client-gametest": ["dev.koefi.boxpvp.test.TrainingIntegrationTest"]
+  },
+  "depends": {"boxpvp": "*", "fabric-client-gametest-api-v1": "*"}
+}

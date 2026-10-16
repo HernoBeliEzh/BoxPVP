@@ -1,0 +1,61 @@
+plugins {
+    id 'net.fabricmc.fabric-loom-remap' version "${loom_version}"
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        boxpvp {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+    inputs.property 'version', project.version
+
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+fabricApi.configureTests {
+    createSourceSet = true
+    modId = 'boxpvp-test'
+    enableGameTests = false
+    enableClientGameTests = true
+}
+
+sourceSets.gametest.compileClasspath += sourceSets.client.output
+sourceSets.gametest.runtimeClasspath += sourceSets.client.output
+
+loom.runs.named('clientGameTest') {
+    vmArg '-Dfabric.client.gametest.disableNetworkSynchronizer=true'
+    vmArg "-Dboxpvp.test.focus=${providers.gradleProperty('testFocus').getOrElse('all')}"
+}

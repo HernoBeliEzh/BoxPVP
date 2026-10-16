@@ -1,0 +1,18 @@
+{
+  "has_fixed_time": true,
+  "has_skylight": true,
+  "has_ceiling": false,
+  "coordinate_scale": 1.0,
+  "min_y": 0,
+  "height": 256,
+  "logical_height": 256,
+  "infiniburn": "#minecraft:infiniburn_overworld",
+  "ambient_light": 1.0,
+  "monster_spawn_block_light_limit": 0,
+  "monster_spawn_light_level": 0,
+  "attributes": {
+    "minecraft:gameplay/sky_light_level": 15.0,
+    "minecraft:visual/sky_color": "#78a7ff",
+    "minecraft:visual/fog_color": "#c0d8ff"
+  }
+}

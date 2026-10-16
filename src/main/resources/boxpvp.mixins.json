@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "dev.koefi.boxpvp.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["PlayerCombatMixin", "ItemCooldownsAccessor"],
+  "client": ["client.BotNameMixin"],
+  "injectors": {"defaultRequire": 1}
+}
