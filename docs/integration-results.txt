@@ -22,6 +22,10 @@ Mace bot launches itself using a real wind-charge projectile
 Mace bot lands a real airborne smash with bonus damage before touching the floor
 Mace bot chains another airborne smash using Wind Burst III without any remaining wind charges
 Defeat opens results and suppresses normal death
+Close pursuit maintains native sprint pace instead of walking while preparing a critical: 4.962445241777093 blocks in 20 ticks
+Advanced pursuit uses native sprint jumps to cover distance quickly: 12.916437582450197 blocks in 40 ticks
+Critical jumps prepare during native weapon recharge and land promptly without bypassing cooldowns: first=15, hits=5 in 80 ticks
+Spear charging honors native item movement and sprint instead of applying the 20-percent eating slowdown: 5.214573946226455 blocks in 20 ticks
 Clicking a characteristic accepts exact chat values, supports 0–60000 ms and rejects out-of-range input
 Nightmare difficulty, kit autoreplay toggle, victory/loss restarts, series counters and explicit stop work
 A threatened low-health bot throws a finite defensive pearl, gains distance and consumes a golden apple
@@ -36,4 +40,3 @@ Decorated arena confines players and bots at horizontal/vertical boundaries and 
 Renamed BoxPVP reads legacy FabricBase kit and recovery directories
 Closing and reopening an actual live match restores the original player without concurrent saves
 Interrupted-session journal survives world restart and restores inventory, durability, XP, effects and dimension
-An interrupted FabricBase session loads its legacy dimension, restores original gear/XP/effects and removes legacy training drops

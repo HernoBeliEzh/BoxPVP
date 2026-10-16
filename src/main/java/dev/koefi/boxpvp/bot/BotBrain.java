@@ -13,6 +13,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.Potions;
+import net.minecraft.world.item.component.UseEffects;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -44,7 +45,6 @@ public final class BotBrain {
     private int nextPressureCheck;
     private boolean pressureThrow;
     private int nextStrafe;
-    private int lastAttack = -20;
     private boolean criticalJump;
     public int smashHits;
     public int criticalHits;
@@ -90,6 +90,9 @@ public final class BotBrain {
         var target = bot.session.owner;
         if (decision-- <= 0) {
             double prediction = difficulty == DifficultyProfile.NIGHTMARE ? 3 : difficulty.ordinal() >= 3 ? 1.25 : difficulty.ordinal() == 2 ? 0.5 : 0;
+            if (bot.distanceTo(target) < 4.5) {
+                prediction = Math.min(prediction, 0.5);
+            }
             perceived = target.position().add(target.getKnownMovement().scale(prediction)).add(0, target.getBbHeight() * 0.6, 0);
             yawError = (bot.getRandom().nextFloat() * 2 - 1) * tuning.aimError();
             pitchError = (bot.getRandom().nextFloat() * 2 - 1) * tuning.aimError();
@@ -102,8 +105,10 @@ public final class BotBrain {
                 nextStrafe = bot.tickCount + (difficulty.ordinal() >= 3 ? 10 : 20) + bot.getRandom().nextInt(15);
             }
             if (!criticalJump) {
+                Vec3 separation = target.position().subtract(bot.position()).multiply(1, 0, 1);
+                boolean escaping = target.getKnownMovement().dot(separation.normalize()) > 0.08;
                 wantCritical = bot.session.settings.rule() == CombatRule.CRITICAL
-                    || bot.session.settings.rule() == CombatRule.NORMAL && bot.getRandom().nextInt(100) < tuning.criticalChance();
+                    || bot.session.settings.rule() == CombatRule.NORMAL && !escaping && bot.getRandom().nextInt(100) < tuning.criticalChance();
             }
         }
         double distance = bot.distanceTo(target);
@@ -120,7 +125,7 @@ public final class BotBrain {
         if (bot.isUsingItem()) {
             aim(perceived, yawError, pitchError);
             if (bot.getUseItem().is(Items.SHIELD)) {
-                if (bot.tickCount >= shieldUntil || distance > 4.5) {
+                if (bot.tickCount >= shieldUntil || distance > 4.5 || wantCritical && distance < 3.5 && readyForCriticalJump()) {
                     bot.stopUsingItem();
                 } else {
                     move(-0.25f, strafe * 0.2f, false);
@@ -165,17 +170,17 @@ public final class BotBrain {
             desired = bot.getAttackStrengthScale(0.5f) < 0.7f && target.getAttackStrengthScale(0.5f) > 0.75f ? 2.8 : 2.1;
         }
         float forward = horizontal > desired + 0.2 ? 1 : horizontal < desired - 0.35 ? -0.25f : 0.12f;
-        float sideways = mace && !bot.onGround() ? 0 : distance < 8 ? strafe * (0.08f + tuning.strafe() * 0.005f) : (index % 2 == 0 ? 0.12f : -0.12f);
+        float sideways = mace && !bot.onGround() ? 0 : horizontal < 3.2 ? strafe * (0.2f + tuning.strafe() * 0.008f) : (index % 2 == 0 ? 0.12f : -0.12f);
         if (difficulty.ordinal() >= 3) {
             sideways *= 0.8f + 0.2f * Mth.sin((bot.tickCount + index * 11) * 0.24f);
-            if (bot.onGround() && bot.tickCount - lastAttack < 2) {
-                forward *= 0.3f;
-            }
         }
         if (tuning.strafe() == 0) {
             sideways = 0;
         }
-        boolean sprint = forward > 0 && (!wantCritical || distance > 4) && (!mace || bot.onGround());
+        boolean sprint = forward > 0.7f && !criticalJump && (!mace || bot.onGround());
+        if (wantCritical && !bot.onGround() && horizontal < 3.2) {
+            sprint = false;
+        }
         move(forward, sideways, sprint);
         if (mace && bot.onGround() && distance < 6 && boostCooldown == 0) {
             int charge = find(stack -> stack.is(Items.WIND_CHARGE));
@@ -193,6 +198,16 @@ public final class BotBrain {
                 return;
             }
         }
+        if (!mace && !spear && wantCritical && bot.onGround() && horizontal < 3.1 && bot.hasLineOfSight(target) && readyForCriticalJump()) {
+            bot.setSprinting(false);
+            criticalJump = true;
+            bot.jumpFromGround();
+            return;
+        }
+        if (difficulty.ordinal() >= 3 && !mace && !spear && sprint && bot.onGround() && horizontal > 6
+            && Math.abs(Mth.wrapDegrees(desiredYaw(perceived) - bot.getYRot())) < 15 && bot.hasLineOfSight(target)) {
+            bot.jumpFromGround();
+        }
         float requiredCharge = (wantCritical && !mace && !spear ? Math.max(91, tuning.charge()) : tuning.charge()) / 100f;
         if (bot.getAttackStrengthScale(0.5f) < requiredCharge || bot.cannotAttackWithItem(weapon, 5)) {
             return;
@@ -206,12 +221,6 @@ public final class BotBrain {
         }
         if (spear && distance > 3 && distance < 7 && bot.tickCount % 70 < 25 && bot.session.settings.rule() == CombatRule.NORMAL) {
             use(bot.getInventory().getSelectedSlot());
-            return;
-        }
-        if (!mace && !spear && wantCritical && bot.onGround() && horizontal < 3.1 && bot.hasLineOfSight(target)) {
-            bot.setSprinting(false);
-            criticalJump = true;
-            bot.jumpFromGround();
             return;
         }
         boolean falling = bot.fallDistance > 0 && !bot.onGround() && bot.getDeltaMovement().y < 0;
@@ -230,7 +239,6 @@ public final class BotBrain {
             return;
         }
         bot.stopUsingItem();
-        lastAttack = bot.tickCount;
         criticalJump = false;
         if (spear && weapon.has(DataComponents.PIERCING_WEAPON)) {
             weapon.get(DataComponents.PIERCING_WEAPON).attack(bot, EquipmentSlot.MAINHAND);
@@ -286,7 +294,7 @@ public final class BotBrain {
             }
         }
         if (bot.onGround() && distance < 4 && bot.getOffhandItem().is(Items.SHIELD) && !bot.getCooldowns().isOnCooldown(bot.getOffhandItem())
-            && !(distance < 3.5 && bot.getAttackStrengthScale(0.5f) > 0.95f)
+            && !(distance < 3.5 && (bot.getAttackStrengthScale(0.5f) > 0.95f || wantCritical && readyForCriticalJump()))
             && bot.session.owner.getAttackStrengthScale(0.5f) > 0.7f && bot.getRandom().nextInt(100) < tuning.shieldChance()) {
             aim(perceived, yawError, pitchError);
             bot.gameMode.useItem(bot, bot.level(), bot.getOffhandItem(), InteractionHand.OFF_HAND);
@@ -295,6 +303,11 @@ public final class BotBrain {
             return true;
         }
         return false;
+    }
+
+    private boolean readyForCriticalJump() {
+        float anticipation = difficulty.ordinal() >= 3 ? 6.5f : 0.5f;
+        return bot.getAttackStrengthScale(anticipation) >= Math.max(91, tuning.charge()) / 100f;
     }
 
     private boolean usePotion(int slot) {
@@ -554,8 +567,10 @@ public final class BotBrain {
             }
         }
         float length = Math.max(1, Mth.sqrt(forward * forward + sideways * sideways));
-        bot.zza = forward / length * (bot.isUsingItem() ? 0.2f : 1);
-        bot.xxa = sideways / length * (bot.isUsingItem() ? 0.2f : 1);
-        bot.setSprinting(sprint && forward > 0 && !bot.isUsingItem() && bot.getFoodData().getFoodLevel() > 6);
+        UseEffects effects = bot.isUsingItem() ? bot.getUseItem().getOrDefault(DataComponents.USE_EFFECTS, UseEffects.DEFAULT) : null;
+        float speed = effects == null ? 1 : effects.speedMultiplier();
+        bot.zza = forward / length * speed;
+        bot.xxa = sideways / length * speed;
+        bot.setSprinting(sprint && forward > 0 && (effects == null || effects.canSprint()) && bot.getFoodData().getFoodLevel() > 6);
     }
 }

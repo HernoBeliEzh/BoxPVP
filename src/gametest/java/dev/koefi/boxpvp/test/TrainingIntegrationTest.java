@@ -68,6 +68,13 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
                 require(kits.get("critical").items().getFirst().getDamageValue() == 0, "Preset stacks are shared");
             });
             pass("Custom kit persistence, spear, durability, independent stacks, OP Sharpness IV / Protection III");
+            if (System.getProperty("boxpvp.test.focus", "all").equals("tempo")) {
+                checkCombatTempo();
+                checkShieldCriticals();
+                checkMovementAndSword();
+                Files.writeString(Path.of("tempo-results.txt"), String.join(System.lineSeparator(), passed));
+                return;
+            }
             if (System.getProperty("boxpvp.test.focus", "all").equals("arena")) {
                 checkArenaBoundary();
                 return;
@@ -567,6 +574,7 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
     }
 
     private void checkNewFeatures() throws java.io.IOException {
+        checkCombatTempo();
         checkChatSettingsAndReplay();
         checkRecoveryAndBusyPearls();
         checkPressurePearls();
@@ -854,6 +862,106 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
         require(axe, server.computeOnServer(instance -> "Sword bot did not switch to axe against a raised shield: blocking=" + owner(instance).isBlocking()
             + ", using=" + owner(instance).isUsingItem() + ", distance=" + current(instance).bots.getFirst().distanceTo(owner(instance))));
         pass("Advanced movement routes around ruin pillars, uses the axe kit sword and switches to axe against a shield");
+        leaveAndCheck();
+    }
+
+    private void checkCombatTempo() throws java.io.IOException {
+        start("axe", 1);
+        context.waitTicks(65);
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.stopUsingItem();
+            bot.removeAllEffects();
+            bot.getInventory().setItem(40, ItemStack.EMPTY);
+            bot.getInventory().setSelectedSlot(5);
+            bot.snapTo(0.5, 65, 0.5, 0, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            bot.resetAttackStrengthTicker();
+            owner(instance).setAbsorptionAmount(200);
+        });
+        for (int tick = 0; tick < 20; tick++) {
+            server.runOnServer(instance -> {
+                BotPlayer bot = current(instance).bots.getFirst();
+                owner(instance).connection.teleport(bot.getX(), 65, bot.getZ() + 3.8, 180, 0);
+            });
+            context.waitTick();
+        }
+        double progress = server.computeOnServer(instance -> current(instance).bots.getFirst().getZ() - 0.5);
+        require(progress > 4.8, "Close pursuit fell below native sprint pace: " + progress + " blocks in 20 ticks");
+        pass("Close pursuit maintains native sprint pace instead of walking while preparing a critical: " + progress + " blocks in 20 ticks");
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.snapTo(0.5, 65, -15.5, 0, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            owner(instance).connection.teleport(0.5, 65, 15.5, 180, 0);
+        });
+        int airborne = 0;
+        for (int tick = 0; tick < 40; tick++) {
+            context.waitTick();
+            if (server.computeOnServer(instance -> !current(instance).bots.getFirst().onGround())) {
+                airborne++;
+            }
+        }
+        double chaseProgress = server.computeOnServer(instance -> current(instance).bots.getFirst().getZ() + 15.5);
+        require(chaseProgress > 11.5 && airborne > 10, "Long pursuit did not use native sprint jumps: " + chaseProgress + " blocks, airborne=" + airborne);
+        pass("Advanced pursuit uses native sprint jumps to cover distance quickly: " + chaseProgress + " blocks in 40 ticks");
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.stopUsingItem();
+            bot.snapTo(0.5, 65, 0.5, 0, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            bot.resetAttackStrengthTicker();
+            bot.brain.criticalHits = 0;
+            owner(instance).connection.teleport(0.5, 65, 2.8, 180, 0);
+            owner(instance).getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE).setBaseValue(1);
+        });
+        int firstHit = 0;
+        int previousHit = 0;
+        int observedHits = 0;
+        for (int tick = 1; tick <= 80; tick++) {
+            context.waitTick();
+            int currentHits = server.computeOnServer(instance -> current(instance).bots.getFirst().brain.criticalHits);
+            if (currentHits > observedHits) {
+                if (firstHit == 0) {
+                    firstHit = tick;
+                }
+                require(previousHit == 0 || tick - previousHit >= 12, "Critical attacks bypassed native sword recharge");
+                previousHit = tick;
+                observedHits = currentHits;
+            }
+        }
+        int hits = server.computeOnServer(instance -> current(instance).bots.getFirst().brain.criticalHits);
+        server.runOnServer(instance -> owner(instance).getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.KNOCKBACK_RESISTANCE).setBaseValue(0));
+        require(firstHit > 0 && firstHit <= 17 && hits >= 5, "Critical timing wasted a charged attack window: first=" + firstHit + ", hits=" + hits + " in 80 ticks");
+        pass("Critical jumps prepare during native weapon recharge and land promptly without bypassing cooldowns: first=" + firstHit + ", hits=" + hits + " in 80 ticks");
+        leaveAndCheck();
+        start("mace", 1);
+        context.waitTicks(65);
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.stopUsingItem();
+            bot.removeAllEffects();
+            bot.getInventory().setSelectedSlot(5);
+            bot.snapTo(0.5, 65, 0.5, 0, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            owner(instance).setAbsorptionAmount(200);
+            owner(instance).connection.teleport(0.5, 65, 6, 180, 0);
+            bot.gameMode.useItem(bot, bot.level(), bot.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND);
+            require(bot.isUsingItem(), "Spear charge did not begin");
+        });
+        for (int tick = 0; tick < 20; tick++) {
+            server.runOnServer(instance -> {
+                BotPlayer bot = current(instance).bots.getFirst();
+                owner(instance).connection.teleport(bot.getX(), 65, bot.getZ() + 5.5, 180, 0);
+            });
+            context.waitTick();
+        }
+        double spearProgress = server.computeOnServer(instance -> current(instance).bots.getFirst().getZ() - 0.5);
+        require(spearProgress > 4.8 && server.computeOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            return bot.isUsingItem() && bot.isSprinting();
+        }), "Charging a spear applied eating slowdown or disabled sprint: " + spearProgress + " blocks in 20 ticks");
+        pass("Spear charging honors native item movement and sprint instead of applying the 20-percent eating slowdown: " + spearProgress + " blocks in 20 ticks");
         leaveAndCheck();
     }
 

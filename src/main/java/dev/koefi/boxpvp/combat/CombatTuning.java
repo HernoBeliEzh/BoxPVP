@@ -12,7 +12,7 @@ public record CombatTuning(int reaction, float aimError, float turnSpeed, int cr
     public static CombatTuning of(DifficultyProfile difficulty) {
         int level = difficulty.ordinal();
         return new CombatTuning(difficulty.reaction, difficulty.error, difficulty.turnSpeed, Math.min(100, 20 + level * 20),
-            Math.min(100, 15 + level * 20), Math.min(100, 15 + level * 20), 8 + level * 2, 100, true);
+            Math.min(100, 15 + level * 20), Math.min(100, 15 + level * 20), Math.min(12, 8 + level * 2), 100, true);
     }
 
     public CombatTuning adjust(int field, int direction) {
