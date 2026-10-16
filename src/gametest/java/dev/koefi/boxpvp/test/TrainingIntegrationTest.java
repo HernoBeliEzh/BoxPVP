@@ -68,6 +68,15 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
                 require(kits.get("critical").items().getFirst().getDamageValue() == 0, "Preset stacks are shared");
             });
             pass("Custom kit persistence, spear, durability, independent stacks, OP Sharpness IV / Protection III");
+            if (System.getProperty("boxpvp.test.focus", "all").equals("showcase")) {
+                captureShowcase();
+                return;
+            }
+            if (System.getProperty("boxpvp.test.focus", "all").equals("menus")) {
+                configureShowcase();
+                captureMenus();
+                return;
+            }
             if (System.getProperty("boxpvp.test.focus", "all").equals("tempo")) {
                 checkCombatTempo();
                 checkShieldCriticals();
@@ -863,6 +872,90 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
             + ", using=" + owner(instance).isUsingItem() + ", distance=" + current(instance).bots.getFirst().distanceTo(owner(instance))));
         pass("Advanced movement routes around ruin pillars, uses the axe kit sword and switches to axe against a shield");
         leaveAndCheck();
+    }
+
+    private void captureShowcase() throws java.io.IOException {
+        configureShowcase();
+        start("op", 1);
+        context.waitTicks(100);
+        context.runOnClient(client -> {
+            client.options.hideGui = true;
+            client.getToastManager().clear();
+        });
+        server.runOnServer(instance -> {
+            MatchSession match = current(instance);
+            match.owner.connection.teleport(0.5, 116, -24.5, 0, 67);
+            match.bots.getFirst().snapTo(20.5, 65, 20.5, 180, 0);
+        });
+        context.waitTicks(3);
+        showcaseShot("arena-overview");
+        server.runOnServer(instance -> owner(instance).connection.teleport(-18.5, 69, -21.5, -35, 8));
+        context.waitTicks(3);
+        showcaseShot("arena-ground");
+        server.runOnServer(instance -> TrainingService.get(instance).leave(owner(instance)));
+        context.waitTicks(3);
+        captureMenus();
+        server.runOnServer(instance -> owner(instance).closeContainer());
+        context.waitTicks(3);
+        captureCombat();
+    }
+
+    private void configureShowcase() {
+        context.getInput().resizeWindow(1280, 720);
+        context.runOnClient(client -> {
+            client.options.guiScale().set(3);
+            client.options.chatVisibility().set(net.minecraft.world.entity.player.ChatVisiblity.HIDDEN);
+            client.resizeDisplay();
+        });
+    }
+
+    private void captureMenus() {
+        server.runOnServer(instance -> TrainingService.get(instance).open(owner(instance), ""));
+        context.waitForScreen(ContainerScreen.class);
+        context.runOnClient(client -> client.options.hideGui = false);
+        context.getInput().setCursorPos(1200, 680);
+        showcaseShot("menu-settings");
+        clickSlot(40);
+        showcaseShot("menu-tuning");
+        clickSlot(49);
+        clickSlot(16);
+        clickSlot(49);
+        clickSlot(12);
+        showcaseShot("menu-kits");
+    }
+
+    private void captureCombat() throws java.io.IOException {
+        start("axe", 1);
+        context.waitTicks(65);
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.stopUsingItem();
+            bot.snapTo(0.5, 65, 0.5, 180, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            owner(instance).connection.teleport(0.5, 65, -4.5, 0, 0);
+        });
+        int botId = server.computeOnServer(instance -> current(instance).bots.getFirst().getId());
+        List<String> frameTicks = new ArrayList<>();
+        for (int frame = 0; frame < 48; frame++) {
+            context.runOnClient(client -> {
+                client.getToastManager().clear();
+                var target = client.level.getEntity(botId);
+                if (target != null) {
+                    client.player.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target.getEyePosition());
+                }
+            });
+            context.waitTick();
+            frameTicks.add(Long.toString(context.computeOnClient(client -> client.level.getGameTime())));
+            showcaseShot("combat-" + String.format(java.util.Locale.ROOT, "%03d", frame));
+        }
+        Files.write(Path.of("showcase", "combat-ticks.txt"), frameTicks);
+        leaveAndCheck();
+    }
+
+    private void showcaseShot(String name) {
+        context.runOnClient(client -> client.getToastManager().clear());
+        context.takeScreenshot(net.fabricmc.fabric.api.client.gametest.v1.screenshot.TestScreenshotOptions.of(name)
+            .disableCounterPrefix().withDestinationDir(Path.of("showcase")));
     }
 
     private void checkCombatTempo() throws java.io.IOException {
