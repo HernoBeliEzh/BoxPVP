@@ -24,7 +24,9 @@ public final class BotBrain {
     private final CombatTuning tuning;
     private final BotRecovery recovery;
     private final BotFlight flight;
+    private final BotMace maceMovement;
     private Vec3 perceived = Vec3.ZERO;
+    private Vec3 perceivedMotion = Vec3.ZERO;
     private float yawError;
     private float pitchError;
     private int decision;
@@ -55,6 +57,7 @@ public final class BotBrain {
     public int flightsStarted;
     public int rocketsUsed;
     public int pressurePearls;
+    public int windBoosts;
 
     public BotBrain(BotPlayer bot, int index) {
         this.bot = bot;
@@ -63,6 +66,7 @@ public final class BotBrain {
         tuning = bot.session.settings.tuning();
         recovery = new BotRecovery(bot, this, tuning);
         flight = new BotFlight(bot, this);
+        maceMovement = new BotMace(bot, this);
         decision = index % Math.max(1, tuning.reaction());
     }
 
@@ -93,7 +97,11 @@ public final class BotBrain {
             if (bot.distanceTo(target) < 4.5) {
                 prediction = Math.min(prediction, 0.5);
             }
-            perceived = target.position().add(target.getKnownMovement().scale(prediction)).add(0, target.getBbHeight() * 0.6, 0);
+            if (bot.getMainHandItem().is(Items.MACE)) {
+                prediction = 0;
+            }
+            perceivedMotion = target.getKnownMovement();
+            perceived = target.position().add(perceivedMotion.scale(prediction)).add(0, target.getBbHeight() * 0.6, 0);
             yawError = (bot.getRandom().nextFloat() * 2 - 1) * tuning.aimError();
             pitchError = (bot.getRandom().nextFloat() * 2 - 1) * tuning.aimError();
             decision = tuning.reaction() - 1;
@@ -132,7 +140,7 @@ public final class BotBrain {
                     return;
                 }
             } else if (bot.getUseItem().has(DataComponents.KINETIC_WEAPON)) {
-                if (distance < 2.5 || bot.getTicksUsingItem() > 35) {
+                if (distance < (find(stack -> stack.is(Items.MACE)) >= 0 ? 6 : 2.5) || bot.getTicksUsingItem() > 35) {
                     bot.stopUsingItem();
                 } else {
                     move(1, strafe * 0.08f, true);
@@ -181,17 +189,22 @@ public final class BotBrain {
         if (wantCritical && !bot.onGround() && horizontal < 3.2) {
             sprint = false;
         }
-        move(forward, sideways, sprint);
+        if (mace && !bot.onGround()) {
+            maceMovement.move(perceived, perceivedMotion);
+        } else {
+            move(forward, sideways, sprint);
+        }
         if (mace && bot.onGround() && distance < 6 && boostCooldown == 0) {
             int charge = find(stack -> stack.is(Items.WIND_CHARGE));
             if (charge >= 0) {
-                if (bot.getAttackStrengthScale(0.5f) < tuning.charge() / 100f) {
+                if (bot.getAttackStrengthScale(difficulty.ordinal() >= 3 ? 10.5f : 0.5f) < tuning.charge() / 100f) {
                     aim(perceived, yawError, pitchError);
                     return;
                 }
                 aimAngles(bot.getYRot(), 90);
                 move(0, 0, false);
                 if (bot.getXRot() > 75 && useWindCharge(charge)) {
+                    windBoosts++;
                     boostCooldown = difficulty.ordinal() >= 3 ? 32 : 48;
                     actionCooldown = 4;
                 }
@@ -204,7 +217,7 @@ public final class BotBrain {
             bot.jumpFromGround();
             return;
         }
-        if (difficulty.ordinal() >= 3 && !mace && !spear && sprint && bot.onGround() && horizontal > 6
+        if (difficulty.ordinal() >= 3 && !spear && sprint && bot.onGround() && horizontal > 6
             && Math.abs(Mth.wrapDegrees(desiredYaw(perceived) - bot.getYRot())) < 15 && bot.hasLineOfSight(target)) {
             bot.jumpFromGround();
         }
@@ -237,6 +250,9 @@ public final class BotBrain {
         var hit = bot.entityAttackRange().getClosesetHit(bot, 1, entity -> entity != bot && entity.isPickable() && !entity.isSpectator());
         if (!(hit instanceof EntityHitResult entityHit) || entityHit.getEntity() != target || !bot.hasLineOfSight(target)) {
             return;
+        }
+        if (mace && bot.session.settings.rule() != CombatRule.COMBO) {
+            bot.setSprinting(false);
         }
         bot.stopUsingItem();
         criticalJump = false;
@@ -344,7 +360,7 @@ public final class BotBrain {
         }
         int selected = blocking ? find(stack -> stack.is(ItemTags.AXES)) : -1;
         if (selected < 0 && bot.onGround() && find(stack -> stack.is(Items.MACE)) >= 0
-            && (bot.distanceTo(bot.session.owner) > 7 || bot.getMainHandItem().is(ItemTags.SPEARS) && bot.distanceTo(bot.session.owner) > 5.5)) {
+            && (bot.distanceTo(bot.session.owner) > 12 || bot.getMainHandItem().is(ItemTags.SPEARS) && bot.distanceTo(bot.session.owner) > 6)) {
             selected = find(stack -> stack.is(ItemTags.SPEARS));
         }
         if (selected < 0) {
@@ -523,8 +539,8 @@ public final class BotBrain {
             || bot.isIgnoringFallDamageFromCurrentImpulse() || bot.fallDistance < 5 || bot.getY() < 70 || bot.getDeltaMovement().y > -0.5) {
             return false;
         }
-        if (bot.getMainHandItem().is(Items.MACE) && bot.position().subtract(bot.session.owner.position()).horizontalDistance() < 8
-            && bot.getAttackStrengthScale(0.5f) > 0.9) {
+        if (bot.getMainHandItem().is(Items.MACE) && maceMovement.canReach(perceived, perceivedMotion)
+            && bot.getAttackStrengthScale(6.5f) > 0.9) {
             return false;
         }
         int pearl = find(stack -> stack.is(Items.ENDER_PEARL));

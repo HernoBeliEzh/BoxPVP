@@ -22,10 +22,12 @@ Mace bot launches itself using a real wind-charge projectile
 Mace bot lands a real airborne smash with bonus damage before touching the floor
 Mace bot chains another airborne smash using Wind Burst III without any remaining wind charges
 Defeat opens results and suppresses normal death
-Close pursuit maintains native sprint pace instead of walking while preparing a critical: 4.962445241777093 blocks in 20 ticks
-Advanced pursuit uses native sprint jumps to cover distance quickly: 12.916437582450197 blocks in 40 ticks
+Nightmare mace tracks a sprinting player through direction changes and lands repeated native airborne smashes: 4
+Nightmare repeatedly launches with wind charges while chasing and consumes exactly one finite charge per launch
+Close pursuit maintains native sprint pace instead of walking while preparing a critical: 4.962383091698683 blocks in 20 ticks
+Advanced pursuit uses native sprint jumps to cover distance quickly: 12.9164734827297 blocks in 40 ticks
 Critical jumps prepare during native weapon recharge and land promptly without bypassing cooldowns: first=15, hits=5 in 80 ticks
-Spear charging honors native item movement and sprint instead of applying the 20-percent eating slowdown: 5.214573946226455 blocks in 20 ticks
+Spear charging honors native item movement and sprint instead of applying the 20-percent eating slowdown: 5.214524673036212 blocks in 20 ticks
 Clicking a characteristic accepts exact chat values, supports 0–60000 ms and rejects out-of-range input
 Nightmare difficulty, kit autoreplay toggle, victory/loss restarts, series counters and explicit stop work
 A threatened low-health bot throws a finite defensive pearl, gains distance and consumes a golden apple

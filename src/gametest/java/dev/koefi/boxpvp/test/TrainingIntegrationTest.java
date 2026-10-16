@@ -132,6 +132,12 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
             }
             if (System.getProperty("boxpvp.test.focus", "all").equals("mace")) {
                 checkMace();
+                checkMovingMace();
+                Files.writeString(Path.of("mace-results.txt"), String.join(System.lineSeparator(), passed));
+                return;
+            }
+            if (System.getProperty("boxpvp.test.focus", "all").equals("pearls")) {
+                checkPressurePearls();
                 return;
             }
             server.runOnServer(instance -> instance.getCommands().performPrefixedCommand(owner(instance).createCommandSourceStack(), "bot"));
@@ -210,6 +216,7 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
             checkSupplies();
             checkPlayerWindCharge();
             checkMace();
+            checkMovingMace();
             checkNewFeatures();
             server.runOnServer(instance -> {
                 Path root = instance.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
@@ -264,13 +271,17 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
     }
 
     private void start(String kit, int count) {
+        start(kit, count, "LEGEND");
+    }
+
+    private void start(String kit, int count, String difficulty) {
         context.setScreen(() -> null);
         server.runOnServer(instance -> {
             JsonObject action = new JsonObject();
             action.addProperty("action", "start");
             action.addProperty("kit", kit);
             action.addProperty("count", count);
-            action.addProperty("difficulty", "LEGEND");
+            action.addProperty("difficulty", difficulty);
             action.addProperty("rule", "NORMAL");
             TrainingService.get(instance).action(owner(instance), action.toString());
         });
@@ -398,7 +409,7 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
     }
 
     private void checkMace() throws java.io.IOException {
-        start("mace", 1);
+        start("mace", 1, "NIGHTMARE");
         context.waitTicks(65);
         server.runOnServer(instance -> {
             MatchSession match = current(instance);
@@ -461,6 +472,73 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
         require(server.computeOnServer(instance -> current(instance).result().equals("Поражение")), "Defeat was not detected");
         context.takeScreenshot("05-defeat");
         pass("Defeat opens results and suppresses normal death");
+        leaveAndCheck();
+    }
+
+    private void checkMovingMace() throws java.io.IOException {
+        start("mace", 1, "NIGHTMARE");
+        context.waitTicks(65);
+        double absorptionLimit = server.computeOnServer(instance -> owner(instance).getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_ABSORPTION).getBaseValue());
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            bot.stopUsingItem();
+            bot.snapTo(0.5, 65, 4.5, 180, 0);
+            bot.setDeltaMovement(Vec3.ZERO);
+            bot.brain.smashHits = 0;
+            owner(instance).connection.teleport(-4.5, 65, -4.5, -90, 0);
+            owner(instance).getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_ABSORPTION).setBaseValue(500);
+            owner(instance).setAbsorptionAmount(500);
+            require(owner(instance).getAbsorptionAmount() == 500, "Moving target lacks its test damage buffer");
+        });
+        List<String> trace = new ArrayList<>();
+        trace.add("tick,x,y,z,vx,vy,vz,targetX,targetZ,charge,fall,health,weapon,smashes,flights,clutches");
+        try {
+            context.runOnClient(client -> {
+                client.options.keyUp.setDown(true);
+                client.options.keySprint.setDown(true);
+            });
+            for (int tick = 0; tick < 280; tick++) {
+                if (tick % 35 == 0) {
+                    float yaw = new float[]{-90, 0, 90, 180}[(tick / 35) % 4];
+                    context.runOnClient(client -> client.player.setYRot(yaw));
+                }
+                context.waitTick();
+                if (tick % 5 == 0) {
+                    int elapsed = tick;
+                    trace.add(server.computeOnServer(instance -> {
+                        BotPlayer bot = current(instance).bots.getFirst();
+                        Vec3 motion = bot.getDeltaMovement();
+                        return String.format(java.util.Locale.ROOT, "%d,%.2f,%.2f,%.2f,%.3f,%.3f,%.3f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%d,%d",
+                            elapsed, bot.getX(), bot.getY(), bot.getZ(), motion.x, motion.y, motion.z, owner(instance).getX(), owner(instance).getZ(),
+                            bot.getAttackStrengthScale(0.5f), bot.fallDistance, bot.getHealth(), bot.getMainHandItem().getItem(), bot.brain.smashHits, bot.brain.flightsStarted, bot.brain.clutchPearls);
+                    }));
+                }
+            }
+        } finally {
+            context.runOnClient(client -> {
+                client.options.keyUp.setDown(false);
+                client.options.keySprint.setDown(false);
+            });
+            Files.write(Path.of("mace-moving-trace.csv"), trace);
+            server.runOnServer(instance -> owner(instance).getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_ABSORPTION).setBaseValue(absorptionLimit));
+        }
+        int hits = server.computeOnServer(instance -> current(instance).bots.getFirst().brain.smashHits);
+        require(hits >= 3 && server.computeOnServer(instance -> current(instance).active() && !current(instance).bots.getFirst().defeated),
+            "Nightmare mace failed to pressure a player sprinting and changing directions: " + hits + " smashes in 280 ticks");
+        pass("Nightmare mace tracks a sprinting player through direction changes and lands repeated native airborne smashes: " + hits);
+        server.runOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            int charges = 0;
+            for (int slot = 0; slot < bot.getInventory().getContainerSize(); slot++) {
+                ItemStack stack = bot.getInventory().getItem(slot);
+                if (stack.is(Items.WIND_CHARGE)) {
+                    charges += stack.getCount();
+                }
+            }
+            require(bot.brain.windBoosts >= 2 && charges + bot.brain.windBoosts == 64,
+                "Nightmare rarely launched or did not consume real wind charges: boosts=" + bot.brain.windBoosts + ", remaining=" + charges);
+        });
+        pass("Nightmare repeatedly launches with wind charges while chasing and consumes exactly one finite charge per launch");
         leaveAndCheck();
     }
 
@@ -731,6 +809,9 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
             bot.getRandom().setSeed(173);
             match.owner.connection.teleport(0.5, 65, 4.5, 0, 0);
             match.owner.setHealth(8);
+            match.owner.setAbsorptionAmount(0);
+            match.owner.getFoodData().setFoodLevel(10);
+            match.owner.getFoodData().setSaturation(0);
         });
         context.waitTicks(2);
         try {
@@ -748,7 +829,11 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
         require(server.computeOnServer(instance -> {
             BotPlayer bot = current(instance).bots.getFirst();
             return bot.brain.pressurePearls == 1 && bot.brain.pearlsThrown == 1;
-        }), "Bot did not pressure a fleeing low-health target with one rate-limited pearl");
+        }), server.computeOnServer(instance -> {
+            BotPlayer bot = current(instance).bots.getFirst();
+            return "Bot did not pressure a fleeing low-health target with one rate-limited pearl: pressure=" + bot.brain.pressurePearls
+                + ", pearls=" + bot.brain.pearlsThrown + ", health=" + owner(instance).getHealth() + ", distance=" + bot.distanceTo(owner(instance));
+        }));
         pass("Bot uses a rate-limited pressure pearl against a fleeing low-health player without repeated throws");
         leaveAndCheck();
     }
@@ -1038,14 +1123,14 @@ public final class TrainingIntegrationTest implements FabricClientGameTest {
             bot.snapTo(0.5, 65, 0.5, 0, 0);
             bot.setDeltaMovement(Vec3.ZERO);
             owner(instance).setAbsorptionAmount(200);
-            owner(instance).connection.teleport(0.5, 65, 6, 180, 0);
+            owner(instance).connection.teleport(0.5, 65, 7, 180, 0);
             bot.gameMode.useItem(bot, bot.level(), bot.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND);
             require(bot.isUsingItem(), "Spear charge did not begin");
         });
         for (int tick = 0; tick < 20; tick++) {
             server.runOnServer(instance -> {
                 BotPlayer bot = current(instance).bots.getFirst();
-                owner(instance).connection.teleport(bot.getX(), 65, bot.getZ() + 5.5, 180, 0);
+                owner(instance).connection.teleport(bot.getX(), 65, bot.getZ() + 6.5, 180, 0);
             });
             context.waitTick();
         }
