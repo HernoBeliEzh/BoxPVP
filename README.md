@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/media/banner.svg" alt="BoxPVP — PvP-тренажёр от Paranoikoff для Minecraft 1.21.11 на Fabric" width="1280">
+<h1>BoxPVP</h1>
 
 <p><strong>Тренируй криты, комбы, щит и серии булавой против ботов.</strong><br>Одиночный мир · от 1 до 8 противников · шесть сложностей · свои наборы</p>
 
